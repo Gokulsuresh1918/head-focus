@@ -16,9 +16,10 @@ from action_feedback import ActionNotice
 from app_resources import ICON_PATH, ensure_app_icon
 from camera_preview import LiveCameraPreview
 from config import AppConfig, ensure_user_config
+from notifications import notify
 from startup_checks import camera_warning_message, probe_camera
 from tracking_engine import TrackingSession, TrackingStatus
-from ui_widgets import ActionBanner, CameraPreviewBox, RoundedButton, RoundedPanel, apply_round_window
+from ui_widgets import CameraPreviewBox, RoundedButton, RoundedPanel, apply_round_window
 
 BG = "#eef1f5"
 COLOR_START = "#2ecc71"
@@ -47,8 +48,8 @@ class DashboardApp:
         self.root = tk.Tk()
         self.root.title("Head Focus")
         self.root.configure(bg=BG)
-        self.root.minsize(380, 520)
-        self.root.geometry("400x560")
+        self.root.minsize(500, 720)
+        self.root.geometry("520x780")
         try:
             self.root.iconbitmap(ICON_PATH)
         except tk.TclError:
@@ -81,28 +82,24 @@ class DashboardApp:
             fg="#555",
         ).pack(anchor="w", pady=(2, 8))
 
-        self._banner = ActionBanner(pad, wraplength=340)
-
-        self._warn = tk.Label(
-            pad, text="", bg="#fff3cd", fg="#664d03", font=("Segoe UI", 9), wraplength=340, padx=10, pady=8
-        )
-
         card = RoundedPanel(pad, panel_bg="#ffffff")
         self._card = card
-        card.pack(fill=tk.X, pady=(0, 12))
-        inner = tk.Frame(card, bg="#ffffff", padx=8, pady=8)
-        inner.pack(fill=tk.X)
+        card.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+        inner = tk.Frame(card, bg="#ffffff", padx=10, pady=10)
+        inner.pack(fill=tk.BOTH, expand=True)
 
         self._preview_box = CameraPreviewBox(inner)
-        self._preview_box.pack()
+        self._preview_box.pack(anchor=tk.CENTER)
 
+        status_row = tk.Frame(card, bg="#ffffff")
+        status_row.pack(fill=tk.X, padx=12, pady=(8, 10))
         self._status = tk.StringVar(value="Starting…")
-        tk.Label(card, textvariable=self._status, font=("Segoe UI", 12, "bold"), bg="#ffffff", fg="#222").pack(
-            anchor="w", padx=12, pady=(4, 0)
+        tk.Label(status_row, textvariable=self._status, font=("Segoe UI", 13, "bold"), bg="#ffffff", fg="#222").pack(
+            anchor="w"
         )
         self._sub = tk.StringVar(value="Setting up camera…")
-        tk.Label(card, textvariable=self._sub, font=("Segoe UI", 9), bg="#ffffff", fg="#666", wraplength=320).pack(
-            anchor="w", padx=12, pady=(0, 10)
+        tk.Label(status_row, textvariable=self._sub, font=("Segoe UI", 9), bg="#ffffff", fg="#666", wraplength=460).pack(
+            anchor="w", pady=(4, 0)
         )
 
         self._btn_main = RoundedButton(
@@ -205,25 +202,37 @@ class DashboardApp:
         self._set_links_enabled(True)
         self._status.set("Tracking")
 
-    def _banner_before(self) -> tk.Widget:
-        return self._warn if self._warn.winfo_ismapped() else self._card
-
-    def _show_action(self, notice: ActionNotice, duration_ms: int = 8000) -> None:
-        if self._tracking_boot and notice.key == "start":
-            duration_ms = 5000
-        self._banner.show_notice(notice, duration_ms, pack_before=self._banner_before())
+    def _feedback(self, notice: ActionNotice) -> None:
+        """Toast or status line only — no duplicate banner inside the window."""
+        self.cfg = AppConfig.load()
+        if self.cfg.show_toast_notifications:
+            notify(notice.title, notice.toast_body(), True)
+        else:
+            line = notice.detail
+            if notice.undo:
+                line = f"{line} ({notice.undo.replace('Undo: ', '')})"
+            self._sub.set(line[:240])
 
     def _on_action(self, notice: ActionNotice) -> None:
-        if self._tracking_boot and notice.key in ("settings", "pause", "resume"):
+        # TrackingSession._announce already shows toasts when enabled.
+        if self.cfg.show_toast_notifications:
             return
-        self.root.after(0, lambda n=notice: self._show_action(n))
+        self.root.after(0, lambda n=notice: self._feedback(n))
 
-    def _show_warn(self, text: str | None):
-        if text:
-            self._warn.config(text=text)
-            self._warn.pack(fill=tk.X, pady=(0, 10), before=self._card)
+    def _hint_outside(self, text: str | None, *, force: bool = False) -> None:
+        """Camera hints via toast only — never a box inside the window."""
+        if not text:
+            return
+        self.cfg = AppConfig.load()
+        if self.cfg.show_toast_notifications or force:
+            notify("Camera", text, True)
         else:
-            self._warn.pack_forget()
+            self._sub.set(text[:220])
+
+    def _scale_preview(self, rgb: np.ndarray) -> ImageTk.PhotoImage:
+        w, h = CameraPreviewBox.PREVIEW_W, CameraPreviewBox.PREVIEW_H
+        img = Image.fromarray(rgb).resize((w, h), Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(img)
 
     def _initial_camera_setup(self):
         self._preview_box.show_loader("Checking camera…", 15)
@@ -239,7 +248,8 @@ class DashboardApp:
     def _finish_initial_setup(self, mean, mode, hint):
         self._start_allowed = bool(mode)
         self._preview_box.hide_loader()
-        self._show_warn(hint)
+        if not mode:
+            self._hint_outside(hint)
         if mode:
             self._sub.set(f"Camera OK · brightness {mean:.0f}")
             self._preview_box.set_placeholder("Click Test camera for live video")
@@ -255,7 +265,9 @@ class DashboardApp:
             self._preview_box.show_loader("Checking camera…", 40)
             self._set_links_enabled(False)
             self._btn_main.configure(state=tk.DISABLED)
-        self._sub.set("Checking camera…")
+            self._sub.set("Checking camera…")
+        else:
+            self._sub.set("Checking camera…")
 
         def work():
             mean, mode = probe_camera(self.cfg.camera_index)
@@ -265,16 +277,20 @@ class DashboardApp:
         threading.Thread(target=work, daemon=True).start()
 
     def _apply_checks(self, mean, mode, hint, user_initiated: bool = False):
+        if not user_initiated:
+            if mode:
+                self._start_allowed = True
+                self._sub.set(f"Camera OK · brightness {mean:.0f}")
+            return
         self._start_allowed = bool(mode)
-        if user_initiated:
-            self._preview_box.hide_loader()
+        self._preview_box.hide_loader()
         if mode:
             self._sub.set(f"Camera OK · brightness {mean:.0f}")
-            if user_initiated and not self._test_preview.running:
+            if not self._test_preview.running:
                 self._preview_box.set_placeholder("Click Test camera for live video")
         else:
-            self._sub.set("Camera not ready — see tip below")
-        self._show_warn(hint)
+            self._sub.set("Camera not ready — see toast notification")
+            self._hint_outside(hint)
         if not self._tracking and not self._tracking_boot:
             self._unlock_idle()
 
@@ -285,13 +301,14 @@ class DashboardApp:
 
     def _tick_preview(self):
         if self._tracking and self._preview_rgb is not None:
-            img = Image.fromarray(self._preview_rgb)
-            self._preview_photo = ImageTk.PhotoImage(img)
+            self._preview_photo = self._scale_preview(self._preview_rgb)
+            self._preview_box.hide_loader()
             self._preview_box.set_video_image(self._preview_photo)
         elif not self._tracking and not self._tracking_boot:
             live = self._test_preview.latest_rgb()
             if live is not None:
-                self._preview_photo = ImageTk.PhotoImage(Image.fromarray(live))
+                self._preview_photo = self._scale_preview(live)
+                self._preview_box.hide_loader()
                 self._preview_box.set_video_image(self._preview_photo)
             elif not self._test_preview.running:
                 pass
@@ -305,7 +322,7 @@ class DashboardApp:
 
     def _on_status(self, status: TrackingStatus):
         def update():
-            if self._tracking_boot or status.message == "Starting camera...":
+            if self._tracking_boot and not status.preview_ready:
                 if status.boot_label:
                     self._sub.set(status.boot_label)
                 if status.boot_progress:
@@ -338,17 +355,15 @@ class DashboardApp:
 
     def _start(self):
         if not self._start_allowed:
-            self._show_action(
+            self._feedback(
                 ActionNotice.custom(
                     "Camera not ready",
                     "Use Test camera or Refresh after closing other apps that use the webcam.",
                 ),
-                duration_ms=8000,
             )
             return
         self.cfg = AppConfig.load()
         self._stop_test_preview(quiet=True)
-        self._banner.hide()
         self._lock_for_tracking_boot()
         self._status.set("Starting…")
         self._sub.set("Loading model and opening webcam…")
@@ -366,8 +381,7 @@ class DashboardApp:
             self.session.stop()
             self.session = None
         self._unlock_idle()
-        if self._start_allowed:
-            self._refresh_checks()
+        self.root.after(600, lambda: self._refresh_checks(user_initiated=False))
 
     def _pause(self):
         if self.session and self.session.status.running and self.session.status.preview_ready:
@@ -375,7 +389,7 @@ class DashboardApp:
         elif self._tracking_boot:
             pass
         else:
-            self._show_action(
+            self._feedback(
                 ActionNotice.custom("Pause", "Start tracking first, then use Pause or Ctrl+Alt+H."),
             )
 
@@ -383,7 +397,7 @@ class DashboardApp:
         if self.session and self.session.status.running and self.session.status.preview_ready:
             self.session.recenter()
         elif not self._tracking_boot:
-            self._show_action(ActionNotice.from_key("recenter_need_start"), duration_ms=6000)
+            self._feedback(ActionNotice.from_key("recenter_need_start"))
 
     def _settings(self):
         if self._tracking_boot:
@@ -408,7 +422,6 @@ class DashboardApp:
             self._stop_test_preview()
             self._refresh_checks()
             return
-        self._banner.hide()
         self._preview_box.show_loader("Opening live preview…", 20)
         self._set_links_enabled(False)
         self._btn_main.configure(state=tk.DISABLED)

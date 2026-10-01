@@ -113,7 +113,7 @@ class TrackingSession:
         self.status.preview_ready = False
         cv2.destroyAllWindows()
         if had_preview:
-            self._announce("stop", toast=not self.gui_mode)
+            self._announce("stop")
 
     def _announce(self, key: str, *, toast: bool | None = None) -> None:
         notice = ActionNotice.from_key(key)
@@ -180,7 +180,7 @@ class TrackingSession:
     def _send_preview(self, frame_bgr) -> None:
         if not self._on_preview or frame_bgr is None:
             return
-        small = cv2.resize(cv2.flip(frame_bgr, 1), (320, 240))
+        small = cv2.resize(cv2.flip(frame_bgr, 1), (480, 360))
         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
         self._on_preview(rgb)
 
@@ -270,7 +270,7 @@ class TrackingSession:
                 self.status.boot_progress = 100
                 self.status.boot_label = "Ready"
                 self._emit()
-                self._announce("start", toast=not self.gui_mode)
+                self._announce("start")
 
             target = mapper.update(yaw, frame_start)
             self.status.yaw = yaw

@@ -122,22 +122,33 @@ class RoundedPanel(tk.Frame):
 class CameraPreviewBox(tk.Frame):
     """Fixed-size camera area with optional loading overlay."""
 
-    PREVIEW_W = 320
-    PREVIEW_H = 240
+    PREVIEW_W = 480
+    PREVIEW_H = 360
 
     def __init__(self, master, **kwargs):
         bg = kwargs.pop("bg", "#2c3e50")
         super().__init__(master, bg=bg, width=self.PREVIEW_W, height=self.PREVIEW_H, **kwargs)
         self.pack_propagate(False)
-        self._video = tk.Label(self, bg=bg, fg="#95a5a6", font=("Segoe UI", 9), text="Camera preview")
-        self._video.place(x=0, y=0, width=self.PREVIEW_W, height=self.PREVIEW_H)
-        self._overlay = tk.Frame(self, bg="#1a252f")
+        self._photo: tk.PhotoImage | None = None
+        self._canvas = tk.Canvas(
+            self, width=self.PREVIEW_W, height=self.PREVIEW_H, bg=bg, highlightthickness=0, bd=0
+        )
+        self._canvas.pack()
+        self._placeholder_id = self._canvas.create_text(
+            self.PREVIEW_W // 2,
+            self.PREVIEW_H // 2,
+            text="Camera preview",
+            fill="#95a5a6",
+            font=("Segoe UI", 10),
+            width=self.PREVIEW_W - 32,
+        )
+        self._overlay = tk.Frame(self, bg="#1a252f", width=self.PREVIEW_W, height=self.PREVIEW_H)
         self._overlay.place(x=0, y=0, width=self.PREVIEW_W, height=self.PREVIEW_H)
         self._overlay.place_forget()
         self._loader_canvas = tk.Canvas(
             self._overlay, width=48, height=48, bg="#1a252f", highlightthickness=0, bd=0
         )
-        self._loader_canvas.pack(pady=(72, 8))
+        self._loader_canvas.pack(pady=(120, 8))
         self._loader_text = tk.StringVar(value="Preparing camera…")
         tk.Label(
             self._overlay,
@@ -146,19 +157,24 @@ class CameraPreviewBox(tk.Frame):
             fg="#ecf0f1",
             font=("Segoe UI", 10),
         ).pack()
-        self._progress = ttk.Progressbar(self._overlay, length=220, mode="determinate", maximum=100)
+        self._progress = ttk.Progressbar(self._overlay, length=320, mode="determinate", maximum=100)
         self._progress.pack(pady=(10, 0))
         self._spinner_angle = 0
         self._spinner_job: str | None = None
 
     def set_video_image(self, photo: tk.PhotoImage | None) -> None:
+        self._canvas.delete("video")
         if photo is None:
-            self._video.config(image="", text="")
-        else:
-            self._video.config(image=photo, text="")
+            return
+        self._canvas.itemconfigure(self._placeholder_id, text="")
+        self._photo = photo
+        self._canvas.create_image(
+            self.PREVIEW_W // 2, self.PREVIEW_H // 2, image=photo, tags="video"
+        )
 
     def set_placeholder(self, text: str) -> None:
-        self._video.config(image="", text=text)
+        self._canvas.delete("video")
+        self._canvas.itemconfigure(self._placeholder_id, text=text)
 
     def show_loader(self, message: str, percent: int) -> None:
         if not self._overlay.winfo_ismapped():
