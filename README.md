@@ -4,6 +4,19 @@ Head-tracked **monitor focus** for Windows. Turn your head left or right to move
 
 Built with OpenCV, MediaPipe Face Landmarker, and the Windows API.
 
+**Repository:** [github.com/Gokulsuresh1918/head-focus](https://github.com/Gokulsuresh1918/head-focus)
+
+## Privacy
+
+Head Focus runs **entirely on your machine**:
+
+- Your webcam is used only for local head-pose tracking; frames are not sent to any Head Focus server.
+- The only default network access is a **one-time download** of Google’s public MediaPipe model (`face_landmarker.task`) if it is not already on disk.
+- Settings and calibration live in **`config.json`** on your PC (including `yaw_offset_deg` from Recenter). This file is **gitignored** and is never part of the public repository.
+- **`check_camera.py`** can save `check_camera.jpg` locally for troubleshooting; that image is gitignored and may show your face—do not share or commit it.
+
+For contributors: see [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Requirements
 
 - Windows 10/11
@@ -73,15 +86,7 @@ Settings are stored in **`config.json`** next to the application.
 
 ## Run at Windows login
 
-Create `start_head_focus.bat`:
-
-```bat
-@echo off
-cd /d "%~dp0"
-start "" /min ".venv\Scripts\pythonw.exe" head_focus.py
-```
-
-Press `Win+R`, type `shell:startup`, and place a shortcut to that batch file in the folder that opens.
+After `install_windows.bat`, press `Win+R`, type `shell:startup`, and put a shortcut to **`start_head_focus.bat`** (or **`Launch Head Focus.bat`**) in the folder that opens.
 
 Use **Task Scheduler** with a 30-second delay if the camera is not ready immediately at login.
 
@@ -116,9 +121,24 @@ notifications.py     Windows toast notifications
 app_resources.py     Icon paths and asset helpers
 assets/icon.ico      Application icon
 start_head_focus.bat Optional Windows startup helper
+install_windows.bat   One-time setup for ZIP download users
+Launch Head Focus.bat Double-click to run the dashboard
+scripts/              Maintainer tools (release ZIP)
 ```
 
 **Not in git (local only):** `config.json`, `face_landmarker.task`, `check_camera.jpg`, `.venv/`
+
+## Publishing a release (maintainers)
+
+So download-only users get a clean ZIP without cloning:
+
+```powershell
+cd head-focus
+git tag v1.0.0
+powershell -ExecutionPolicy Bypass -File scripts\make_release_zip.ps1
+```
+
+Upload `dist\head-focus-1.0.0.zip` (or `snapshot`) to **GitHub → Releases → New release**, attach the ZIP, and paste the “Download and run” steps from this README into the release notes.
 
 ## License
 
@@ -126,4 +146,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Pull requests welcome. Open an issue for bugs or feature ideas.
+Pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. Report security concerns privately as described in [SECURITY.md](SECURITY.md).
