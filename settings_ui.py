@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox, ttk
 
+from PIL import Image, ImageTk
+
+from action_feedback import ActionNotice
 from config import DEFAULT_CONFIG_PATH, USER_CONFIG_PATH, AppConfig, ensure_user_config
-from startup_checks import run_check_camera_script
-from ui_widgets import RoundedButton, apply_round_window
+from camera_preview import LiveCameraPreview
+from startup_checks import camera_warning_message
+from ui_widgets import ActionBanner, RoundedButton, apply_round_window
 
 # ---------------------------------------------------------------------------
 # Copy shown in the UI (plain language for end users)
@@ -100,6 +105,8 @@ class SettingsApp:
         self.cfg = AppConfig.load()
         self.on_saved = on_saved
         self._vars: dict[str, tk.Variable] = {}
+        self._cam_photo: ImageTk.PhotoImage | None = None
+        self._test_preview = LiveCameraPreview()
 
         self.root = tk.Tk()
         self.root.title("Head Focus - Settings")
@@ -109,6 +116,8 @@ class SettingsApp:
         self._build()
         self._center_window()
         apply_round_window(self.root)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(80, self._tick_cam_preview)
 
     def _setup_theme(self):
         try:
@@ -217,11 +226,19 @@ class SettingsApp:
             if k in self._vars:
                 self._vars[k].set(v)
         self._status.set(f"Applied '{name}' preset - click Save to keep changes.")
+        self._banner.show_notice(
+            ActionNotice.custom(
+                f"{name} preset applied",
+                "Values updated on the Tracking tab. Click Save at the bottom to keep them.",
+            ),
+            duration_ms=10000,
+        )
 
     def _build(self):
         head = tk.Frame(self.root, bg="#eef1f5", padx=16, pady=12)
         head.pack(fill=tk.X)
         tk.Label(head, text="Settings", font=("Segoe UI", 18, "bold"), bg="#eef1f5", fg="#222").pack(anchor="w")
+        self._banner = ActionBanner(head, wraplength=560)
 
         nb = ttk.Notebook(self.root, padding=(8, 4))
         nb.pack(fill=tk.BOTH, expand=True)
@@ -248,6 +265,23 @@ class SettingsApp:
         self._add_int_row(sec, "camera_index", 0, 9)
         self._add_int_row(sec, "target_fps", 5, 30)
 
+        cam_box = self._section(g, "Camera test preview")
+        ttk.Label(
+            cam_box,
+            text="Click Test camera for a live preview here. Video is not saved to disk.",
+            wraplength=520,
+            font=self.font_hint,
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 6))
+        self._cam_preview = tk.Label(
+            cam_box,
+            text="No preview yet",
+            bg="#2c3e50",
+            fg="#95a5a6",
+            font=("Segoe UI", 9),
+            height=10,
+        )
+        self._cam_preview.pack(fill=tk.X)
         sec = self._section(g, "Notifications")
         self._add_bool_row(sec, "show_toast_notifications")
         self._add_bool_row(sec, "notify_on_monitor_switch")
@@ -352,6 +386,13 @@ class SettingsApp:
         if self.on_saved:
             self.on_saved(self.cfg)
         self._status.set("Saved. Restart Head Focus for all changes to take effect.")
+        self._banner.show_notice(
+            ActionNotice.custom(
+                "Settings saved",
+                "Your choices are written to config.json. Restart Head Focus if it is already running.",
+            ),
+            duration_ms=12000,
+        )
         messagebox.showinfo(
             "Head Focus",
             "Settings saved.\n\nRestart Head Focus if it is already running.",
@@ -366,16 +407,74 @@ class SettingsApp:
         for key, var in self._vars.items():
             var.set(getattr(self.cfg, key))
         self._status.set("Defaults loaded into the form - click Save to apply.")
+        self._banner.show_notice(
+            ActionNotice.custom(
+                "Defaults loaded",
+                "Form reset to factory values. Click Save to write them to config.json.",
+            ),
+            duration_ms=10000,
+        )
         messagebox.showinfo("Head Focus", "Defaults restored. Click Save to write config.json.")
 
+    def _tick_cam_preview(self):
+        live = self._test_preview.latest_rgb()
+        if live is not None:
+            self._cam_photo = ImageTk.PhotoImage(Image.fromarray(live))
+            self._cam_preview.config(image=self._cam_photo, text="")
+        self.root.after(80, self._tick_cam_preview)
+
     def _test_camera(self):
-        self._status.set("Running camera test...")
-        self.root.update_idletasks()
-        run_check_camera_script()
-        self._status.set("Camera test finished. See console or check_camera.jpg.")
+        if self._test_preview.running:
+            self._test_preview.stop()
+            self._cam_preview.config(image="", text="No preview yet", bg="#2c3e50")
+            self._status.set("Live preview stopped.")
+            self._banner.show_text(
+                "Preview stopped",
+                "Click Test camera again to start live video.",
+                duration_ms=8000,
+            )
+            return
+        self._status.set("Starting live preview…")
+        self._banner.show_notice(ActionNotice.from_key("test_camera_busy"), duration_ms=0)
+        self._cam_preview.config(image="", text="Opening camera…", bg="#2c3e50")
+        idx = int(self._vars["camera_index"].get())
+
+        def work():
+            ok, mode = self._test_preview.start(idx)
+
+            def done():
+                if ok:
+                    self._status.set(f"Live preview ({mode})")
+                    self._banner.show_text(
+                        "Live preview",
+                        f"{mode or 'Camera'} — video stays in this window only. Click Test camera to stop.",
+                        duration_ms=12000,
+                    )
+                else:
+                    self._cam_preview.config(image="", text="Camera test failed", bg="#2c3e50")
+                    self._status.set("Camera test failed")
+                    hint = camera_warning_message(0.0, None) or ""
+                    self._banner.show_text(
+                        "Camera test failed",
+                        hint or "Close other apps using the webcam and check Camera privacy for python.exe.",
+                        duration_ms=14000,
+                    )
+
+            self.root.after(0, done)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_close(self):
+        self._test_preview.stop()
+        self.root.destroy()
 
     def _open_folder(self):
         os.startfile(os.path.dirname(USER_CONFIG_PATH))
+        self._banner.show_text(
+            "Folder opened",
+            f"Config folder: {os.path.dirname(USER_CONFIG_PATH)}",
+            duration_ms=8000,
+        )
 
     def run(self):
         self.root.mainloop()

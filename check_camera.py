@@ -1,15 +1,17 @@
 """Quick webcam check — run this before head_focus.py.
 
-Saves check_camera.jpg and prints whether frames look usable.
+Prints whether frames look usable. Does not save images unless you pass --save.
 """
 
+import argparse
 import os
 import sys
 
 import cv2
 import numpy as np
 
-MIN_MEAN = 8.0
+from startup_checks import MIN_FRAME_MEAN
+
 ATTEMPTS = (
     ("YUY2 1920x1080", {"fourcc": None, "w": 1920, "h": 1080}),
     ("YUY2 640x480", {"fourcc": None, "w": 640, "h": 480}),
@@ -42,15 +44,19 @@ def try_capture(index=0):
             continue
         mean = float(frame.mean())
         print(f"  {label}: shape={frame.shape} brightness={mean:.1f} max={frame.max()}")
-        if mean >= MIN_MEAN:
+        if mean >= MIN_FRAME_MEAN:
             return frame, label
     return None, None
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Test webcam without saving unless --save is used.")
+    parser.add_argument("--save", action="store_true", help="Write check_camera.jpg (optional diagnostic)")
+    args = parser.parse_args()
+
     exe = _parent_hint()
     print(f"Testing camera index 0 (allow camera for {exe} in Windows Settings).\n")
-    frame, mode = try_capture(0)
+    frame, label = try_capture(0)
     if frame is None:
         print("\nNo usable video - all attempts were black or failed.")
         print("1. Open the Windows Camera app — if that is black too, fix the driver/USB/lens.")
@@ -63,9 +69,12 @@ def main():
             pass
         sys.exit(1)
 
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "check_camera.jpg")
-    cv2.imwrite(out, frame)
-    print(f"\nOK ({mode}). Saved {out} — open that file to confirm you see yourself.")
+    ok_label = label or "OK"
+    print(f"\nOK ({ok_label}). Use Test camera in Head Focus for a live preview (nothing is saved).")
+    if args.save and frame is not None:
+        out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "check_camera.jpg")
+        cv2.imwrite(out, frame)
+        print(f"Saved {out} (--save). Delete this file when done if you do not want a local snapshot.")
 
 
 if __name__ == "__main__":

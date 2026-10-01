@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Head Focus — Download for Windows</title>
+  <meta name="description" content="Free Windows app: move keyboard focus between monitors by turning your head. Download and run locally." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%232ecc71'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #eef1f5;
+      --card: #fff;
+      --text: #1a1a1a;
+      --muted: #555;
+      --accent: #1a5fb4;
+      --green: #27ae60;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    h1 { font-size: 1.85rem; margin: 0 0 0.35rem; }
+    .tagline { color: var(--muted); margin: 0 0 1.5rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+    .btn {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.75rem 1.25rem;
+      border-radius: 10px;
+      margin: 0.25rem 0.5rem 0.25rem 0;
+    }
+    .btn:hover { filter: brightness(0.95); }
+    .btn.secondary {
+      background: var(--accent);
+    }
+    ol { margin: 0; padding-left: 1.25rem; }
+    li { margin: 0.4rem 0; }
+    .note {
+      font-size: 0.9rem;
+      color: var(--muted);
+      border-left: 3px solid #93c5fd;
+      padding-left: 0.75rem;
+      margin-top: 1rem;
+    }
+    footer { font-size: 0.85rem; color: var(--muted); margin-top: 2rem; }
+    footer a { color: var(--accent); }
+    code { font-size: 0.9em; background: #f0f0f0; padding: 0.1em 0.35em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Head Focus</h1>
+    <p class="tagline">Look at a monitor → keyboard focus follows. Runs on your PC only (webcam + Windows).</p>
+
+    <div class="card">
+      <h2>Download</h2>
+      <p>This is not a web app — you install it once on Windows and run it locally.</p>
+      <a class="btn" href="https://github.com/Gokulsuresh1918/head-focus/releases/latest">Latest release (ZIP)</a>
+      <a class="btn secondary" href="https://github.com/Gokulsuresh1918/head-focus/archive/refs/heads/main.zip">Source ZIP (main branch)</a>
+    </div>
+
+    <div class="card">
+      <h2>Setup (about 5 minutes)</h2>
+      <ol>
+        <li>Install <a href="https://www.python.org/downloads/">Python 3.10+</a> and check <strong>Add python.exe to PATH</strong>.</li>
+        <li>Unzip the download to a folder (e.g. <code>C:\Apps\head-focus</code>).</li>
+        <li>Double-click <code>install_windows.bat</code> (once).</li>
+        <li>Double-click <code>Launch Head Focus.bat</code> → <strong>Test camera</strong> → <strong>Start</strong>.</li>
+        <li>Allow Camera for <code>python.exe</code> / <code>pythonw.exe</code> when Windows asks.</li>
+      </ol>
+      <p class="note"><strong>Privacy:</strong> Video stays on your machine. The app only downloads Google’s public face model (~10 MB) on first run.</p>
+    </div>
+
+    <div class="card">
+      <h2>Source &amp; help</h2>
+      <p>
+        <a href="https://github.com/Gokulsuresh1918/head-focus">GitHub repository</a> ·
+        <a href="https://github.com/Gokulsuresh1918/head-focus/blob/main/README.md">Full README</a> ·
+        <a href="https://github.com/Gokulsuresh1918/head-focus/issues">Report a bug</a>
+      </p>
+    </div>
+
+    <footer>
+      MIT licensed · Windows 10/11 · Not affiliated with Vercel or GitHub.
+    </footer>
+  </div>
+</body>
+</html>

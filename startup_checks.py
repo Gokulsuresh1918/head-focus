@@ -79,7 +79,7 @@ def probe_camera(index: int) -> tuple[float, str | None]:
     return 0.0, None
 
 
-def check_camera_on_start(cfg: AppConfig) -> bool:
+def check_camera_on_start(cfg: AppConfig, *, open_privacy_settings: bool = True) -> bool:
     if not cfg.check_camera_on_start:
         return True
     mean, mode = probe_camera(cfg.camera_index)
@@ -92,10 +92,11 @@ def check_camera_on_start(cfg: AppConfig) -> bool:
         "  - Allow camera for python.exe in Settings > Privacy > Camera\n"
         "  - Run: python check_camera.py"
     )
-    try:
-        os.startfile("ms-settings:privacy-webcam")
-    except OSError:
-        pass
+    if open_privacy_settings:
+        try:
+            os.startfile("ms-settings:privacy-webcam")
+        except OSError:
+            pass
     if cfg.exit_on_black_camera:
         return False
     return True

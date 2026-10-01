@@ -35,7 +35,7 @@ Head Focus is designed to process video **locally on your PC**:
 | File | Risk | In git? |
 |------|------|--------|
 | `config.json` | Calibration (`yaw_offset_deg`) and preferences | No (gitignored) |
-| `check_camera.jpg` | Snapshot from your webcam during diagnostics | No (gitignored) |
+| `check_camera.jpg` | Only if you run `check_camera.py --save` | No (gitignored) |
 | Debug preview window | Live video on screen when enabled | User-controlled setting |
 
 **Contributors:** Never commit `config.json`, diagnostic images, or recordings. See [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,0 +1,28 @@
+# TEMPLATE — not submitted to winget-pkgs yet.
+# Replace InstallerUrl, InstallerSha256, and version after you ship HeadFocus-Setup-X.Y.Z.exe on GitHub Releases.
+# See docs/WINGET.md
+
+PackageIdentifier: Gokulsuresh1918.HeadFocus
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Gokulsuresh1918
+PublisherUrl: https://github.com/Gokulsuresh1918
+PublisherSupportUrl: https://github.com/Gokulsuresh1918/head-focus/issues
+PackageName: Head Focus
+PackageUrl: https://github.com/Gokulsuresh1918/head-focus
+License: MIT
+LicenseUrl: https://github.com/Gokulsuresh1918/head-focus/blob/main/LICENSE
+ShortDescription: Move keyboard focus to the monitor you look at using head tracking.
+Moniker: headfocus
+Tags:
+  - accessibility
+  - head-tracking
+  - multi-monitor
+Installers:
+  - Architecture: x64
+    InstallerType: exe
+    InstallerUrl: https://github.com/Gokulsuresh1918/head-focus/releases/download/v1.0.0/HeadFocus-Setup-1.0.0.exe
+    InstallerSha256: REPLACE_WITH_SHA256_FROM_Get-FileHash
+    Scope: user
+ManifestType: installer
+ManifestVersion: 1.6.0

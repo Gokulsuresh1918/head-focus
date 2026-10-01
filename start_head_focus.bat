@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 if not exist ".venv\Scripts\pythonw.exe" (
-  echo Create a venv first: python -m venv .venv ^& pip install -r requirements.txt
+  echo Run install_windows.bat first, or double-click "Launch Head Focus.bat".
   pause
   exit /b 1
 )

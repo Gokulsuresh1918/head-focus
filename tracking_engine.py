@@ -38,6 +38,9 @@ class TrackingStatus:
     target_monitor: str | None = None
     camera: str = ""
     message: str = "Ready"
+    boot_progress: int = 0
+    boot_label: str = ""
+    preview_ready: bool = False
 
 
 class TrackingSession:
@@ -47,8 +50,11 @@ class TrackingSession:
         on_status: Callable[[TrackingStatus], None] | None = None,
         on_preview: Callable[[np.ndarray], None] | None = None,
         on_action: Callable[[ActionNotice], None] | None = None,
+        *,
+        gui_mode: bool = False,
     ):
         self.cfg = cfg
+        self.gui_mode = gui_mode
         self._on_status = on_status
         self._on_preview = on_preview
         self._on_action = on_action
@@ -59,6 +65,7 @@ class TrackingSession:
         self._hotkeys: HotkeyService | None = None
         self._tray: TrayController | None = None
         self._tracker: HeadTracker | None = None
+        self._preview_ready = False
 
     def start(self) -> bool:
         """Start tracking on a background thread (does not block the UI)."""
@@ -71,27 +78,11 @@ class TrackingSession:
         self.status.running = True
         self.status.paused = False
         self.status.message = "Starting camera..."
+        self.status.boot_progress = 5
+        self.status.boot_label = "Starting…"
+        self.status.preview_ready = False
+        self._preview_ready = False
         self._emit()
-
-        self._hotkeys = HotkeyService(
-            on_toggle=self.toggle_pause,
-            on_recenter=self.recenter,
-            on_settings=self._open_settings,
-            enable_toggle=self.cfg.hotkey_toggle_pause,
-            enable_recenter=self.cfg.hotkey_recenter,
-            enable_settings=self.cfg.hotkey_open_settings,
-        )
-        self._hotkeys.start()
-
-        if self.cfg.show_tray_icon:
-            self._tray = TrayController(
-                get_paused=lambda: self.status.paused,
-                on_toggle_pause=self.toggle_pause,
-                on_recenter=self.recenter,
-                on_open_settings=self._open_settings,
-                on_quit=self.stop,
-            )
-            self._tray.start()
 
         self._thread = threading.Thread(target=self._boot_and_run, name="TrackingLoop", daemon=True)
         self._thread.start()
@@ -117,14 +108,42 @@ class TrackingSession:
             self._thread.join(timeout=8.0)
             self._thread = None
         self._starting = False
+        had_preview = self._preview_ready
+        self._preview_ready = False
+        self.status.preview_ready = False
         cv2.destroyAllWindows()
-        self._announce("stop")
+        if had_preview:
+            self._announce("stop", toast=not self.gui_mode)
 
-    def _announce(self, key: str) -> None:
+    def _announce(self, key: str, *, toast: bool | None = None) -> None:
         notice = ActionNotice.from_key(key)
         if self._on_action:
             self._on_action(notice)
-        notify(notice.title, notice.toast_body(), self.cfg.show_toast_notifications)
+        use_toast = self.cfg.show_toast_notifications if toast is None else toast
+        if use_toast:
+            notify(notice.title, notice.toast_body(), True)
+
+    def _start_input_services(self) -> None:
+        if self._hotkeys or self._stop_event.is_set():
+            return
+        self._hotkeys = HotkeyService(
+            on_toggle=self.toggle_pause,
+            on_recenter=self.recenter,
+            on_settings=self._open_settings,
+            enable_toggle=self.cfg.hotkey_toggle_pause,
+            enable_recenter=self.cfg.hotkey_recenter,
+            enable_settings=self.cfg.hotkey_open_settings,
+        )
+        self._hotkeys.start()
+        if self.cfg.show_tray_icon:
+            self._tray = TrayController(
+                get_paused=lambda: self.status.paused,
+                on_toggle_pause=self.toggle_pause,
+                on_recenter=self.recenter,
+                on_open_settings=self._open_settings,
+                on_quit=self.stop,
+            )
+            self._tray.start()
 
     def toggle_pause(self) -> None:
         if not self.status.running:
@@ -167,15 +186,22 @@ class TrackingSession:
 
     def _boot_and_run(self) -> None:
         try:
-            if self.cfg.check_camera_on_start and not check_camera_on_start(self.cfg):
+            self._emit(boot_progress=15, boot_label="Checking camera…")
+            if self._stop_event.is_set():
+                return
+            if self.cfg.check_camera_on_start and not check_camera_on_start(
+                self.cfg, open_privacy_settings=not self.gui_mode
+            ):
                 self.status.running = False
                 self.status.message = "Camera check failed"
+                self.status.boot_progress = 0
                 self._emit()
-                notify(
-                    "Head Focus",
-                    "Camera not ready. Use Test camera or check privacy settings.",
-                    self.cfg.show_toast_notifications,
-                )
+                if not self.gui_mode:
+                    notify(
+                        "Head Focus",
+                        "Camera not ready. Use Test camera or check privacy settings.",
+                        self.cfg.show_toast_notifications,
+                    )
                 self._shutdown_services()
                 return
 
@@ -195,14 +221,22 @@ class TrackingSession:
                 self._emit()
 
     def _run_loop(self) -> None:
+        if self._stop_event.is_set():
+            return
+        self._emit(boot_progress=35, boot_label="Loading face model…")
         mapper = ScreenMapper(self.cfg)
         switcher = FocusSwitcher(verbose=self.cfg.debug_preview)
+        if self._stop_event.is_set():
+            return
+        self._emit(boot_progress=55, boot_label="Opening webcam…")
         tracker = HeadTracker(self.cfg)
         self._tracker = tracker
         self.status.camera = tracker._camera_label
-        self.status.message = "Tracking"
-        self._emit()
-        self._announce("start")
+        self.status.message = "Starting camera..."
+        self._emit(boot_progress=75, boot_label="Starting video…")
+        self._start_input_services()
+        if self._stop_event.is_set():
+            return
 
         if self.cfg.debug_preview:
             cv2.namedWindow(DEBUG_WINDOW, cv2.WINDOW_NORMAL)
@@ -229,6 +263,14 @@ class TrackingSession:
                 break
 
             self._send_preview(frame)
+            if not self._preview_ready and frame is not None and frame.mean() >= 8:
+                self._preview_ready = True
+                self.status.preview_ready = True
+                self.status.message = "Tracking"
+                self.status.boot_progress = 100
+                self.status.boot_label = "Ready"
+                self._emit()
+                self._announce("start", toast=not self.gui_mode)
 
             target = mapper.update(yaw, frame_start)
             self.status.yaw = yaw

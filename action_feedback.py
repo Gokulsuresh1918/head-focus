@@ -41,6 +41,16 @@ ACTION_TEXT: dict[str, tuple[str, str, str]] = {
         "Start tracking first, then look at the centre monitor and press Ctrl+Alt+C.",
         "",
     ),
+    "test_camera_busy": (
+        "Live preview",
+        "Opening your webcam for live video in the panel below. Nothing is saved to disk.",
+        "",
+    ),
+    "refresh_camera": (
+        "Checking camera",
+        "Quick probe of your webcam — result will show here and in the status line.",
+        "",
+    ),
 }
 
 
@@ -54,6 +64,10 @@ class ActionNotice:
     @classmethod
     def from_key(cls, key: str) -> ActionNotice:
         title, detail, undo = ACTION_TEXT[key]
+        return cls(key=key, title=title, detail=detail, undo=undo)
+
+    @classmethod
+    def custom(cls, title: str, detail: str, undo: str = "", key: str = "custom") -> ActionNotice:
         return cls(key=key, title=title, detail=detail, undo=undo)
 
     def toast_body(self) -> str:

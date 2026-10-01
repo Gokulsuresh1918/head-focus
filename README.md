@@ -13,18 +13,44 @@ Head Focus runs **entirely on your machine**:
 - Your webcam is used only for local head-pose tracking; frames are not sent to any Head Focus server.
 - The only default network access is a **one-time download** of Google’s public MediaPipe model (`face_landmarker.task`) if it is not already on disk.
 - Settings and calibration live in **`config.json`** on your PC (including `yaw_offset_deg` from Recenter). This file is **gitignored** and is never part of the public repository.
-- **`check_camera.py`** can save `check_camera.jpg` locally for troubleshooting; that image is gitignored and may show your face—do not share or commit it.
+- **Test camera** in the app shows **live video only** — nothing is written to disk. The CLI `check_camera.py` does not save images unless you pass **`--save`** (optional `check_camera.jpg`, gitignored).
 
 For contributors: see [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Requirements
 
 - Windows 10/11
-- Python 3.10+
 - Webcam
+- **Python 3.10+** ([python.org/downloads](https://www.python.org/downloads/) — enable **Add python.exe to PATH**)
 - Two or more monitors (optional; with one monitor the app runs but does not switch)
 
-## Install
+---
+
+## Download and run (no Git)
+
+For users who only want to **download and use** the app:
+
+1. **Get the files**
+   - **Recommended:** [Releases](https://github.com/Gokulsuresh1918/head-focus/releases) → download the latest `head-focus-….zip` (when published), **or**
+   - On the repo page: **Code** → **Download ZIP**, then unzip to a folder (e.g. `C:\Apps\head-focus`).
+
+2. **One-time setup** — double-click **`install_windows.bat`** (creates `.venv`, installs packages; needs internet once).
+
+3. **Run** — double-click **`Launch Head Focus.bat`**. Use **Test camera**, then **Start**.
+
+4. **Permissions** — allow **Camera** for `python.exe` / `pythonw.exe`. On first **Start**, the face model downloads once (~10 MB).
+
+| File | Purpose |
+|------|---------|
+| `install_windows.bat` | First-time setup (run once) |
+| `Launch Head Focus.bat` | Start the dashboard (daily use) |
+| `start_head_focus.bat` | For Startup folder shortcuts |
+
+On first run, `config.json` is created from `config.default.json` in your install folder (not in git).
+
+---
+
+## Developers: clone and install
 
 ```bash
 git clone https://github.com/Gokulsuresh1918/head-focus.git
@@ -32,33 +58,17 @@ cd head-focus
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+python head_focus.py
 ```
 
-On first run, `config.json` is created from `config.default.json` (this file stays on your machine and is not in git). The face model `face_landmarker.task` is downloaded automatically on first run and is also gitignored.
+## Quick start (after setup)
 
-## Quick start
+1. Open the dashboard (`Launch Head Focus.bat` or `python head_focus.py`).
+2. Click **Test camera** — live preview in the window (click again to stop).
+3. Click **Start** — look at a monitor to move focus.
+4. **Settings** (link or **Ctrl+Alt+S** while running) for sensitivity and camera index.
 
-1. **Test the camera** (quit eViacam and other camera apps first):
-
-   ```bash
-   python check_camera.py
-   ```
-
-2. **Configure** (optional):
-
-   ```bash
-   python head_focus.py --settings
-   ```
-
-   Or open **Settings** from the system tray while the app is running.
-
-3. **Run the app** (opens the dashboard with icon and controls):
-
-   ```bash
-   python head_focus.py
-   ```
-
-   Terminal-only mode: `python head_focus.py --console`
+Terminal-only: `python head_focus.py --console` · Settings only: `python head_focus.py --settings`
 
 ## Configuration
 
@@ -128,17 +138,32 @@ scripts/              Maintainer tools (release ZIP)
 
 **Not in git (local only):** `config.json`, `face_landmarker.task`, `check_camera.jpg`, `.venv/`
 
+## Host a download link (Vercel)
+
+Head Focus **cannot run on Vercel** — it needs Windows, a webcam, and local Python. Vercel is only for a **landing page** with download buttons.
+
+1. Push this repo to GitHub (includes the `website/` folder).
+2. Sign in at [vercel.com](https://vercel.com) → **Add New Project** → import **head-focus**.
+3. Set **Root Directory** to `website` (Framework Preset: **Other**, no build command).
+4. Deploy. You get a URL like `https://head-focus.vercel.app` to share.
+
+Point the green button at a real file: publish a ZIP under [GitHub Releases](https://github.com/Gokulsuresh1918/head-focus/releases) (see below). Until then, users can use the “Source ZIP” button on the landing page.
+
 ## Publishing a release (maintainers)
 
-So download-only users get a clean ZIP without cloning:
+**Step-by-step guide:** [docs/RELEASE_GUIDE.md](docs/RELEASE_GUIDE.md)
+
+**Quick path:** push tag `v1.0.0` → GitHub Actions builds `head-focus-1.0.0.zip` → appears on [Releases](https://github.com/Gokulsuresh1918/head-focus/releases).
 
 ```powershell
-cd head-focus
+git push origin main
 git tag v1.0.0
-powershell -ExecutionPolicy Bypass -File scripts\make_release_zip.ps1
+git push origin v1.0.0
 ```
 
-Upload `dist\head-focus-1.0.0.zip` (or `snapshot`) to **GitHub → Releases → New release**, attach the ZIP, and paste the “Download and run” steps from this README into the release notes.
+Manual ZIP: `powershell -ExecutionPolicy Bypass -File scripts\make_release_zip.ps1`
+
+**Later:** `.exe` + winget + Store → [docs/PACKAGING.md](docs/PACKAGING.md), [docs/WINGET.md](docs/WINGET.md)
 
 ## License
 
