@@ -1,0 +1,7 @@
+opencv-python
+mediapipe
+screeninfo
+pywin32
+pystray
+Pillow
+winotify

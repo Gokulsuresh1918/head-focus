@@ -1,0 +1,400 @@
+"""User-friendly settings window for Head Focus."""
+
+from __future__ import annotations
+
+import json
+import os
+import tkinter as tk
+import tkinter.font as tkfont
+from tkinter import messagebox, ttk
+
+from config import DEFAULT_CONFIG_PATH, USER_CONFIG_PATH, AppConfig, ensure_user_config
+from startup_checks import run_check_camera_script
+
+# ---------------------------------------------------------------------------
+# Copy shown in the UI (plain language for end users)
+# ---------------------------------------------------------------------------
+FIELD_HELP = {
+    "debug_preview": (
+        "Show live webcam preview",
+        "Opens a small video window with head angle and target monitor. "
+        "Turn off for everyday use (tray icon only).",
+    ),
+    "show_tray_icon": (
+        "Run in the system tray",
+        "Green icon = tracking on. Right-click or use the menu to pause, recenter, or quit.",
+    ),
+    "camera_index": (
+        "Which webcam to use",
+        "Usually 0. If the wrong camera opens, try 1 or 2 after running Test camera.",
+    ),
+    "target_fps": (
+        "Tracking speed",
+        "Lower values use less CPU. 10–15 is fine for most PCs.",
+    ),
+    "yaw_threshold_deg": (
+        "How far to turn your head",
+        "Degrees left/right before switching monitors. Increase if it switches too easily.",
+    ),
+    "hysteresis_deg": (
+        "Stability (anti-jitter)",
+        "Must turn back this much before leaving a zone. Helps stop flickering at the boundary.",
+    ),
+    "dwell_seconds": (
+        "Hold time before switch",
+        "Seconds you must look at a monitor before focus moves. Increase to avoid accidents.",
+    ),
+    "yaw_offset_deg": (
+        "Calibration offset",
+        "Normally set with Recenter (Ctrl+Alt+C). Advanced: edit manually if needed.",
+    ),
+    "smoothing": (
+        "Motion smoothing",
+        "Higher = smoother but slower to react. 0.25–0.4 works well.",
+    ),
+    "check_camera_on_start": (
+        "Test webcam on startup",
+        "Quick check that the camera is not black before tracking starts.",
+    ),
+    "warn_if_eviacam_running": (
+        "Warn about eViacam",
+        "eViacam often blocks other apps from using the same webcam.",
+    ),
+    "exit_on_black_camera": (
+        "Quit if camera fails check",
+        "If the startup test fails, exit instead of running with a black feed.",
+    ),
+    "hotkey_toggle_pause": (
+        "Pause / resume",
+        "Ctrl + Alt + H",
+    ),
+    "hotkey_recenter": (
+        "Recenter (save straight-ahead)",
+        "Ctrl + Alt + C — look at the centre monitor first.",
+    ),
+    "hotkey_open_settings": (
+        "Open settings",
+        "Ctrl + Alt + S",
+    ),
+    "show_toast_notifications": (
+        "Show toast notifications",
+        "Windows notifications when you pause, recenter, start/stop, etc.",
+    ),
+    "notify_on_monitor_switch": (
+        "Notify on every monitor switch",
+        "Can be frequent; leave off unless you want a toast each time focus moves.",
+    ),
+}
+
+SENSITIVITY_PRESETS = {
+    "Easy": {"yaw_threshold_deg": 12.0, "dwell_seconds": 0.15, "hysteresis_deg": 3.0},
+    "Balanced": {"yaw_threshold_deg": 15.0, "dwell_seconds": 0.25, "hysteresis_deg": 4.0},
+    "Strict": {"yaw_threshold_deg": 22.0, "dwell_seconds": 0.45, "hysteresis_deg": 6.0},
+}
+
+
+class SettingsApp:
+    def __init__(self, on_saved=None):
+        ensure_user_config()
+        self.cfg = AppConfig.load()
+        self.on_saved = on_saved
+        self._vars: dict[str, tk.Variable] = {}
+
+        self.root = tk.Tk()
+        self.root.title("Head Focus - Settings")
+        self.root.minsize(560, 520)
+        self.root.geometry("620x580")
+        self._setup_theme()
+        self._build()
+        self._center_window()
+
+    def _setup_theme(self):
+        try:
+            self.root.tk.call("source", "azure.tcl")
+        except tk.TclError:
+            pass
+        style = ttk.Style()
+        if "vista" in style.theme_names():
+            style.theme_use("vista")
+        elif "clam" in style.theme_names():
+            style.theme_use("clam")
+        self.font_title = tkfont.Font(family="Segoe UI", size=14, weight="bold")
+        self.font_sub = tkfont.Font(family="Segoe UI", size=9)
+        self.font_body = tkfont.Font(family="Segoe UI", size=10)
+        self.font_hint = tkfont.Font(family="Segoe UI", size=9)
+        self.root.configure(bg="#f5f5f5")
+
+    def _center_window(self):
+        self.root.update_idletasks()
+        w, h = self.root.winfo_width(), self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (w // 2)
+        y = (self.root.winfo_screenheight() // 2) - (h // 2)
+        self.root.geometry(f"+{x}+{y}")
+
+    def _scrollable_tab(self, parent) -> ttk.Frame:
+        outer = ttk.Frame(parent)
+        canvas = tk.Canvas(outer, highlightthickness=0, bg="#f5f5f5")
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas, padding=12)
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def _wheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _wheel)
+        outer._inner = inner  # type: ignore[attr-defined]
+        return outer
+
+    def _section(self, parent, title: str) -> ttk.LabelFrame:
+        frame = ttk.LabelFrame(parent, text=f"  {title}  ", padding=(12, 10))
+        frame.pack(fill=tk.X, pady=(0, 12))
+        return frame
+
+    def _add_bool_row(self, parent, key: str):
+        title, desc = FIELD_HELP[key]
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=6)
+        var = tk.BooleanVar(value=getattr(self.cfg, key))
+        self._vars[key] = var
+        cb = ttk.Checkbutton(row, text=title, variable=var)
+        cb.pack(anchor="w")
+        ttk.Label(row, text=desc, wraplength=520, font=self.font_hint, foreground="#555").pack(
+            anchor="w", padx=(22, 0), pady=(2, 0)
+        )
+
+    def _add_int_row(self, parent, key: str, from_, to):
+        title, desc = FIELD_HELP[key]
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=6)
+        top = ttk.Frame(row)
+        top.pack(fill=tk.X)
+        ttk.Label(top, text=title, font=self.font_body).pack(side=tk.LEFT)
+        var = tk.IntVar(value=getattr(self.cfg, key))
+        self._vars[key] = var
+        ttk.Spinbox(top, textvariable=var, from_=from_, to=to, width=8).pack(side=tk.RIGHT)
+        ttk.Label(row, text=desc, wraplength=520, font=self.font_hint, foreground="#555").pack(
+            anchor="w", pady=(2, 0)
+        )
+
+    def _add_float_row(self, parent, key: str, from_, to, increment=0.5):
+        title, desc = FIELD_HELP[key]
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=6)
+        top = ttk.Frame(row)
+        top.pack(fill=tk.X)
+        ttk.Label(top, text=title, font=self.font_body).pack(side=tk.LEFT)
+        var = tk.DoubleVar(value=getattr(self.cfg, key))
+        self._vars[key] = var
+        ttk.Spinbox(
+            top, textvariable=var, from_=from_, to=to, increment=increment, width=8
+        ).pack(side=tk.RIGHT)
+        ttk.Label(row, text=desc, wraplength=520, font=self.font_hint, foreground="#555").pack(
+            anchor="w", pady=(2, 0)
+        )
+
+    def _add_hotkey_row(self, parent, key: str):
+        title, shortcut = FIELD_HELP[key]
+        row = ttk.Frame(parent)
+        row.pack(fill=tk.X, pady=8)
+        var = tk.BooleanVar(value=getattr(self.cfg, key))
+        self._vars[key] = var
+        left = ttk.Frame(row)
+        left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Checkbutton(left, text=title, variable=var).pack(anchor="w")
+        ttk.Label(
+            row, text=shortcut, font=("Consolas", 10), foreground="#0066aa"
+        ).pack(side=tk.RIGHT, padx=(8, 0))
+
+    def _apply_preset(self, name: str):
+        preset = SENSITIVITY_PRESETS[name]
+        for k, v in preset.items():
+            if k in self._vars:
+                self._vars[k].set(v)
+        self._status.set(f"Applied '{name}' preset - click Save to keep changes.")
+
+    def _build(self):
+        header = tk.Frame(self.root, bg="#1a5fb4", padx=16, pady=14)
+        header.pack(fill=tk.X)
+        tk.Label(
+            header,
+            text="Head Focus",
+            font=self.font_title,
+            fg="white",
+            bg="#1a5fb4",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="Turn your head to move keyboard focus between monitors.",
+            font=self.font_sub,
+            fg="#dce8f5",
+            bg="#1a5fb4",
+        ).pack(anchor="w", pady=(4, 0))
+
+        nb = ttk.Notebook(self.root, padding=(8, 4))
+        nb.pack(fill=tk.BOTH, expand=True)
+
+        tab_general = self._scrollable_tab(nb)
+        tab_tracking = self._scrollable_tab(nb)
+        tab_startup = self._scrollable_tab(nb)
+        tab_hotkeys = self._scrollable_tab(nb)
+        nb.add(tab_general, text="  General  ")
+        nb.add(tab_tracking, text="  Tracking  ")
+        nb.add(tab_startup, text="  Startup  ")
+        nb.add(tab_hotkeys, text="  Shortcuts  ")
+
+        g = tab_general._inner
+        t = tab_tracking._inner
+        s = tab_startup._inner
+        h = tab_hotkeys._inner
+
+        sec = self._section(g, "Appearance")
+        self._add_bool_row(sec, "debug_preview")
+        self._add_bool_row(sec, "show_tray_icon")
+
+        sec = self._section(g, "Camera & performance")
+        self._add_int_row(sec, "camera_index", 0, 9)
+        self._add_int_row(sec, "target_fps", 5, 30)
+
+        sec = self._section(g, "Notifications")
+        self._add_bool_row(sec, "show_toast_notifications")
+        self._add_bool_row(sec, "notify_on_monitor_switch")
+
+        info = ttk.Frame(g, padding=(0, 4))
+        info.pack(fill=tk.X)
+        ttk.Label(
+            info,
+            text="After changing settings, restart Head Focus or use Save and relaunch.",
+            font=self.font_hint,
+            foreground="#666",
+        ).pack(anchor="w")
+
+        sec = self._section(t, "Quick presets")
+        preset_row = ttk.Frame(sec)
+        preset_row.pack(fill=tk.X, pady=4)
+        ttk.Label(preset_row, text="Sensitivity:", font=self.font_body).pack(side=tk.LEFT)
+        for name in SENSITIVITY_PRESETS:
+            ttk.Button(preset_row, text=name, width=10, command=lambda n=name: self._apply_preset(n)).pack(
+                side=tk.LEFT, padx=4
+            )
+
+        sec = self._section(t, "Fine tuning")
+        self._add_float_row(sec, "yaw_threshold_deg", 5, 45)
+        self._add_float_row(sec, "hysteresis_deg", 0, 20)
+        self._add_float_row(sec, "dwell_seconds", 0.05, 2.0, increment=0.05)
+        self._add_float_row(sec, "smoothing", 0.05, 1.0, increment=0.05)
+        self._add_float_row(sec, "yaw_offset_deg", -90, 90)
+
+        tip = ttk.Frame(t, padding=(4, 0))
+        tip.pack(fill=tk.X)
+        ttk.Label(
+            tip,
+            text="Tip: Look at your centre monitor and press Ctrl+Alt+C (or tray → Recenter) to set straight-ahead.",
+            wraplength=540,
+            font=self.font_hint,
+            foreground="#1a5fb4",
+        ).pack(anchor="w")
+
+        sec = self._section(s, "When the app starts")
+        self._add_bool_row(sec, "check_camera_on_start")
+        self._add_bool_row(sec, "warn_if_eviacam_running")
+        self._add_bool_row(sec, "exit_on_black_camera")
+
+        sec = self._section(h, "Keyboard shortcuts (global)")
+        ttk.Label(
+            sec,
+            text="Work while Head Focus runs in the background. Uncheck to disable a shortcut.",
+            wraplength=520,
+            font=self.font_hint,
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 8))
+        self._add_hotkey_row(sec, "hotkey_toggle_pause")
+        self._add_hotkey_row(sec, "hotkey_recenter")
+        self._add_hotkey_row(sec, "hotkey_open_settings")
+
+        footer = ttk.Frame(self.root, padding=(12, 8))
+        footer.pack(fill=tk.X)
+
+        self._status = tk.StringVar(value="Changes are not saved until you click Save.")
+        ttk.Label(footer, textvariable=self._status, font=self.font_hint, foreground="#666").pack(
+            anchor="w", pady=(0, 8)
+        )
+
+        btn_row = ttk.Frame(footer)
+        btn_row.pack(fill=tk.X)
+        save_btn = tk.Button(
+            btn_row,
+            text="  Save settings  ",
+            command=self._save,
+            bg="#1a5fb4",
+            fg="white",
+            activebackground="#15539e",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            font=("Segoe UI", 10, "bold"),
+        )
+        save_btn.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_row, text="Test camera", command=self._test_camera).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_row, text="Restore defaults", command=self._restore_defaults).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_row, text="Open folder", command=self._open_folder).pack(side=tk.LEFT, padx=4)
+
+        ttk.Label(
+            footer,
+            text="Config file: config.json (in this app folder)",
+            font=("Segoe UI", 8),
+            foreground="#999",
+        ).pack(anchor="w", pady=(8, 0))
+
+    def _apply_vars(self) -> AppConfig:
+        cfg = AppConfig.defaults()
+        for key, var in self._vars.items():
+            setattr(cfg, key, var.get())
+        return cfg
+
+    def _save(self):
+        self.cfg = self._apply_vars()
+        self.cfg.save()
+        if self.on_saved:
+            self.on_saved(self.cfg)
+        self._status.set("Saved. Restart Head Focus for all changes to take effect.")
+        messagebox.showinfo(
+            "Head Focus",
+            "Settings saved.\n\nRestart Head Focus if it is already running.",
+        )
+
+    def _restore_defaults(self):
+        if os.path.isfile(DEFAULT_CONFIG_PATH):
+            with open(DEFAULT_CONFIG_PATH, encoding="utf-8") as f:
+                self.cfg = AppConfig.from_dict(json.load(f))
+        else:
+            self.cfg = AppConfig.defaults()
+        for key, var in self._vars.items():
+            var.set(getattr(self.cfg, key))
+        self._status.set("Defaults loaded into the form - click Save to apply.")
+        messagebox.showinfo("Head Focus", "Defaults restored. Click Save to write config.json.")
+
+    def _test_camera(self):
+        self._status.set("Running camera test...")
+        self.root.update_idletasks()
+        run_check_camera_script()
+        self._status.set("Camera test finished. See console or check_camera.jpg.")
+
+    def _open_folder(self):
+        os.startfile(os.path.dirname(USER_CONFIG_PATH))
+
+    def run(self):
+        self.root.mainloop()
+
+
+def main():
+    SettingsApp().run()
+
+
+if __name__ == "__main__":
+    main()

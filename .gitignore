@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+config.json
+check_camera.jpg
+_cam_test.jpg
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
