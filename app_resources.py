@@ -9,10 +9,27 @@ from PIL import Image, ImageDraw
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(APP_DIR, "assets")
 ICON_PATH = os.path.join(ASSETS_DIR, "icon.ico")
+ICON_PNG_PATH = os.path.join(ASSETS_DIR, "icon.png")
+
+
+def _png_to_ico() -> None:
+    from PIL import Image
+
+    img = Image.open(ICON_PNG_PATH).convert("RGBA")
+    w, h = img.size
+    side = min(w, h)
+    left, top = (w - side) // 2, (h - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    sizes = [256, 64, 48, 32, 16]
+    icons = [img.resize((s, s), Image.Resampling.LANCZOS) for s in sizes]
+    icons[0].save(ICON_PATH, format="ICO", sizes=[(s, s) for s in sizes])
 
 
 def ensure_app_icon() -> str:
     os.makedirs(ASSETS_DIR, exist_ok=True)
+    if os.path.isfile(ICON_PNG_PATH):
+        if not os.path.isfile(ICON_PATH) or os.path.getmtime(ICON_PNG_PATH) > os.path.getmtime(ICON_PATH):
+            _png_to_ico()
     if os.path.isfile(ICON_PATH):
         return ICON_PATH
     sizes = [(256, 256), (64, 64), (48, 48), (32, 32), (16, 16)]
