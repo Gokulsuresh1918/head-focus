@@ -32,13 +32,25 @@ def is_process_running(image_name: str) -> bool:
         return False
 
 
-def warn_eviacam_if_needed(cfg: AppConfig) -> None:
+def camera_warning_message(mean: float, mode: str | None) -> str | None:
+    """User-facing hint when the camera probe fails; None if OK."""
+    if mode and mean >= MIN_FRAME_MEAN:
+        return None
+    return (
+        "Your webcam looks busy or blocked. Close other apps that use the camera "
+        "(video calls, virtual cameras, other head trackers). "
+        "Allow python.exe under Settings > Privacy & security > Camera, then click Refresh."
+    )
+
+
+def warn_conflicting_camera_apps(cfg: AppConfig) -> None:
     if not cfg.warn_if_eviacam_running:
         return
-    if is_process_running("eviacam.exe"):
+    mean, mode = probe_camera(cfg.camera_index)
+    if not mode:
         print(
-            "WARNING: eViacam is running and often blocks the webcam for other apps.\n"
-            "         Quit eViacam from the system tray before using Head Focus."
+            "WARNING: Camera not ready. Close other apps using the webcam and "
+            "check Settings > Privacy > Camera for python.exe."
         )
 
 
@@ -76,7 +88,7 @@ def check_camera_on_start(cfg: AppConfig) -> bool:
         return True
     print(
         "Camera check failed: feed looks black or unavailable.\n"
-        "  - Quit eViacam / Zoom / Teams\n"
+        "  - Close other apps using the camera\n"
         "  - Allow camera for python.exe in Settings > Privacy > Camera\n"
         "  - Run: python check_camera.py"
     )

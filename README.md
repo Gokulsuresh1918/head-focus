@@ -14,14 +14,14 @@ Built with OpenCV, MediaPipe Face Landmarker, and the Windows API.
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/head-focus.git
+git clone https://github.com/Gokulsuresh1918/head-focus.git
 cd head-focus
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-On first run, `config.json` is created from `config.default.json`. The face model `face_landmarker.task` is downloaded automatically if missing.
+On first run, `config.json` is created from `config.default.json` (this file stays on your machine and is not in git). The face model `face_landmarker.task` is downloaded automatically on first run and is also gitignored.
 
 ## Quick start
 
@@ -100,15 +100,25 @@ Look at your **centre monitor** (straight ahead) and press **Ctrl+Alt+C** or cho
 ## Project layout
 
 ```
-head_focus.py      Main app
-settings_ui.py     Configuration window
-config.py          Load/save config.json
-config.default.json  Shipped defaults
-check_camera.py    Camera diagnostic
-startup_checks.py  Startup camera / eViacam checks
-tray_ui.py         System tray
-hotkeys.py         Global hotkeys
+head_focus.py        CLI entry, vision, focus switching
+dashboard.py         GUI dashboard (default when run with no args)
+tracking_engine.py   Background tracking session (tray, hotkeys)
+settings_ui.py       Configuration window
+ui_widgets.py        Shared Tkinter UI helpers
+action_feedback.py   User action messages / toasts
+config.py            Load/save config.json
+config.default.json  Shipped defaults (no personal data)
+check_camera.py      Camera diagnostic
+startup_checks.py    Startup camera / eViacam checks
+tray_ui.py           System tray
+hotkeys.py           Global hotkeys
+notifications.py     Windows toast notifications
+app_resources.py     Icon paths and asset helpers
+assets/icon.ico      Application icon
+start_head_focus.bat Optional Windows startup helper
 ```
+
+**Not in git (local only):** `config.json`, `face_landmarker.task`, `check_camera.jpg`, `.venv/`
 
 ## License
 

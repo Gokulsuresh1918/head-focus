@@ -1,11 +1,40 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
-config.json
-check_camera.jpg
-_cam_test.jpg
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local user settings (created from config.default.json on first run)
+config.json
+
+# Downloaded / generated at runtime (not shipped in repo)
+face_landmarker.task
+
+# Webcam diagnostic output (may contain your face — never commit)
+check_camera.jpg
+_cam_test.jpg
+*.jpg
+*.jpeg
+*.png
+!assets/**
+
+# Secrets
+.env
+.env.*
+
+# IDE / editor
 .idea/
 .vscode/
+.cursor/
+
+# OS junk
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log

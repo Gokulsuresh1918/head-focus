@@ -10,6 +10,7 @@ from tkinter import messagebox, ttk
 
 from config import DEFAULT_CONFIG_PATH, USER_CONFIG_PATH, AppConfig, ensure_user_config
 from startup_checks import run_check_camera_script
+from ui_widgets import RoundedButton, apply_round_window
 
 # ---------------------------------------------------------------------------
 # Copy shown in the UI (plain language for end users)
@@ -57,8 +58,8 @@ FIELD_HELP = {
         "Quick check that the camera is not black before tracking starts.",
     ),
     "warn_if_eviacam_running": (
-        "Warn about eViacam",
-        "eViacam often blocks other apps from using the same webcam.",
+        "Log camera conflict warnings",
+        "Print a console warning at startup if the webcam probe fails.",
     ),
     "exit_on_black_camera": (
         "Quit if camera fails check",
@@ -107,6 +108,7 @@ class SettingsApp:
         self._setup_theme()
         self._build()
         self._center_window()
+        apply_round_window(self.root)
 
     def _setup_theme(self):
         try:
@@ -122,7 +124,7 @@ class SettingsApp:
         self.font_sub = tkfont.Font(family="Segoe UI", size=9)
         self.font_body = tkfont.Font(family="Segoe UI", size=10)
         self.font_hint = tkfont.Font(family="Segoe UI", size=9)
-        self.root.configure(bg="#f5f5f5")
+        self.root.configure(bg="#eef1f5")
 
     def _center_window(self):
         self.root.update_idletasks()
@@ -217,22 +219,9 @@ class SettingsApp:
         self._status.set(f"Applied '{name}' preset - click Save to keep changes.")
 
     def _build(self):
-        header = tk.Frame(self.root, bg="#1a5fb4", padx=16, pady=14)
-        header.pack(fill=tk.X)
-        tk.Label(
-            header,
-            text="Head Focus",
-            font=self.font_title,
-            fg="white",
-            bg="#1a5fb4",
-        ).pack(anchor="w")
-        tk.Label(
-            header,
-            text="Turn your head to move keyboard focus between monitors.",
-            font=self.font_sub,
-            fg="#dce8f5",
-            bg="#1a5fb4",
-        ).pack(anchor="w", pady=(4, 0))
+        head = tk.Frame(self.root, bg="#eef1f5", padx=16, pady=12)
+        head.pack(fill=tk.X)
+        tk.Label(head, text="Settings", font=("Segoe UI", 18, "bold"), bg="#eef1f5", fg="#222").pack(anchor="w")
 
         nb = ttk.Notebook(self.root, padding=(8, 4))
         nb.pack(fill=tk.BOTH, expand=True)
@@ -315,41 +304,41 @@ class SettingsApp:
         self._add_hotkey_row(sec, "hotkey_recenter")
         self._add_hotkey_row(sec, "hotkey_open_settings")
 
-        footer = ttk.Frame(self.root, padding=(12, 8))
+        footer = tk.Frame(self.root, bg="#eef1f5", padx=16, pady=12)
         footer.pack(fill=tk.X)
 
-        self._status = tk.StringVar(value="Changes are not saved until you click Save.")
-        ttk.Label(footer, textvariable=self._status, font=self.font_hint, foreground="#666").pack(
+        self._status = tk.StringVar(value="Tap Save to apply changes.")
+        tk.Label(footer, textvariable=self._status, font=self.font_hint, fg="#666", bg="#eef1f5").pack(
             anchor="w", pady=(0, 8)
         )
 
-        btn_row = ttk.Frame(footer)
-        btn_row.pack(fill=tk.X)
-        save_btn = tk.Button(
-            btn_row,
-            text="  Save settings  ",
-            command=self._save,
-            bg="#1a5fb4",
-            fg="white",
-            activebackground="#15539e",
-            activeforeground="white",
-            relief=tk.FLAT,
-            padx=12,
-            pady=6,
-            cursor="hand2",
-            font=("Segoe UI", 10, "bold"),
-        )
-        save_btn.pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_row, text="Test camera", command=self._test_camera).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btn_row, text="Restore defaults", command=self._restore_defaults).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btn_row, text="Open folder", command=self._open_folder).pack(side=tk.LEFT, padx=4)
-
-        ttk.Label(
+        RoundedButton(
             footer,
-            text="Config file: config.json (in this app folder)",
-            font=("Segoe UI", 8),
-            foreground="#999",
-        ).pack(anchor="w", pady=(8, 0))
+            text="Save",
+            command=self._save,
+            fill="#1a5fb4",
+            fill_hover="#15539e",
+            height=44,
+            bg="#eef1f5",
+        ).pack(fill=tk.X, pady=(0, 8))
+
+        links = tk.Frame(footer, bg="#eef1f5")
+        links.pack(fill=tk.X)
+        for text, cmd in (
+            ("Test camera", self._test_camera),
+            ("Defaults", self._restore_defaults),
+            ("Open folder", self._open_folder),
+        ):
+            tk.Button(
+                links,
+                text=text,
+                command=cmd,
+                relief=tk.FLAT,
+                bg="#eef1f5",
+                fg="#1a5fb4",
+                font=("Segoe UI", 10),
+                cursor="hand2",
+            ).pack(side=tk.LEFT, padx=(0, 12))
 
     def _apply_vars(self) -> AppConfig:
         cfg = AppConfig.defaults()
